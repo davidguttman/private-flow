@@ -1,0 +1,17 @@
+engine = "whisper"
+[hotkey]
+key = "SCROLLLOCK"
+enabled = false
+[whisper]
+mode = "local"
+model = "large-v3-turbo"
+language = "auto"
+translate = false
+[audio]
+device = "default"
+sample_rate = 16000
+max_duration_secs = 300
+[output]
+mode = "type"
+fallback_to_clipboard = false
+type_delay_ms = 0

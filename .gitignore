@@ -1,0 +1,9 @@
+/.gradle/
+/local.properties
+**/build/
+*.env
+*.key
+/bridge/.venv/
+/references/*.mp4
+/evidence/
+__pycache__/

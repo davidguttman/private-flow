@@ -1,0 +1,1 @@
+<resources><string name="accessibility_description">Shows a dictation bubble beside text fields and inserts your transcript. Audio is sent only to your paired private computer. Existing field text is never sent to the server.</string></resources>

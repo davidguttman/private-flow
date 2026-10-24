@@ -13,7 +13,7 @@ Android floating-bubble dictation with local Voxtype transcription on your own c
 - Replaces Done with a spinner and “Transcribing” immediately after submission; only Cancel remains active until the result arrives.
 - Sends 16-kHz mono PCM WAV over your encrypted Tailscale connection.
 - Runs the installed Voxtype with an explicitly local Whisper configuration.
-- Inserts at the original selection, preserving surrounding text.
+- Inserts through Android’s accessibility editing connection at the original selection, preserving actual surrounding text. Placeholder strings exposed as accessibility text are never copied into the editor. Your existing keyboard remains selected; native paste is the fallback when an editing connection is unavailable.
 - If the field, selection, or existing content changes, copies the transcript instead of inserting into an unexpected destination.
 - Hides in password, number, date/time, and phone-number fields.
 - Uses single-use, 15-minute pairing codes and hashed per-device bearer credentials.
@@ -54,9 +54,11 @@ To invalidate all paired devices, remove the credential database at `~/.local/sh
 
 ## Privacy boundary
 
-Only captured audio goes to the bridge; existing editor text stays on Android. The bridge processes audio in a private RAM-backed temporary directory on Linux and removes it after completion, timeout, or failure. Cancellation prevents insertion but an already-uploaded request may finish on the computer before its temporary files are removed. The receiving app controls text after insertion; clipboard fallback follows Android clipboard handling. Tailscale may relay encrypted packets; no external service receives plaintext audio through this implementation.
+Only captured audio goes to the bridge; existing editor text stays on Android. The bridge processes audio in a private RAM-backed temporary directory on Linux and removes it after completion, timeout, or failure. Cancellation prevents insertion but an already-uploaded request may finish on the computer before its temporary files are removed. The receiving app controls text after insertion; native paste / clipboard fallback follows Android clipboard handling. Tailscale may relay encrypted packets; no external service receives plaintext audio through this implementation.
 
 ## Verification
+
+`./gradlew :app:assembleDebugAndroidTest` builds a separate editor-fixture APK, never bundled into the shipped app. `scripts/verify_placeholder_insertion.py` first reproduces the old unmarked-Message-placeholder append using 0.2.1, then verifies empty fields, unmarked hints with/without hint metadata, actual typed Message, middle insertion, and selected-text replacement against the current APK. It uses real Android editing/microphone capture with a loopback transcript fixture and checks that the normal keyboard remains unchanged.
 
 `python -m unittest discover -s bridge -v` checks authentication, code reuse rejection, hashed credential storage, malformed WAV rejection, and busy handling. Set `PRIVATE_FLOW_TEST_WAV` to a spoken WAV fixture for real Voxtype integration; `PRIVATE_FLOW_EXPECTED_TEXT` sets its expected phrase.
 

@@ -2,6 +2,7 @@ package dev.privateflow
 
 import android.Manifest
 import android.animation.ValueAnimator
+import android.accessibilityservice.InputMethod
 import android.accessibilityservice.AccessibilityService
 import android.content.*
 import android.content.pm.PackageManager
@@ -55,6 +56,7 @@ class FlowAccessibilityService : AccessibilityService() {
     private fun resetIdle() { state="idle";expandBubble();scheduleIdleShrink() }
     fun refreshAppearance() { main.post { expandBubble();scheduleIdleShrink() } }
     var amplitude=0f
+    override fun onCreateInputMethod()=InputMethod(this)
     override fun onServiceConnected() { instance=this; wm=getSystemService(WINDOW_SERVICE) as WindowManager; bubbleY=resources.displayMetrics.heightPixels/2; syncFocus() }
     override fun onAccessibilityEvent(event:AccessibilityEvent?) { if(state=="idle")syncFocus() }
     private fun focused():AccessibilityNodeInfo? {
@@ -131,20 +133,45 @@ class FlowAccessibilityService : AccessibilityService() {
         val stable=n!=null && n.refresh() && n.isFocused && current?.windowId==targetWindow &&
             (targetId==null || current.viewIdResourceName==targetId) && eligible(n) &&
             fieldText(n)==targetText && n.textSelectionStart==targetSelection.first && n.textSelectionEnd==targetSelection.second
-        var inserted=false
-        if(stable) {
-            val start=targetSelection.first.coerceIn(0,targetText.length)
-            val end=targetSelection.second.coerceIn(start,targetText.length)
-            val result=targetText.substring(0,start)+text+targetText.substring(end)
-            inserted=n!!.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,result) })
-            if(inserted)n.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,Bundle().apply { putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,start+text.length);putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,start+text.length) })
+        if(!stable || text.isBlank()) {
+            if(text.isNotBlank())copyTranscript(text,"Text field changed. Transcript copied — paste where you want it.")
+            finishInsertion()
+            return@post
         }
-        if(!inserted && text.isNotBlank()) {
+        // Accessibility text may include an unmarked placeholder (e.g. WhatsApp's
+        // “Message”). Never reconstruct the Editable from that representation.
+        val method=inputMethod
+        val connection=method?.currentInputConnection
+        val editor=method?.currentInputEditorInfo
+        if(connection!=null && method.currentInputStarted && editor?.packageName==n!!.packageName?.toString()) {
+            connection.commitText(text,1,null)
+            android.util.Log.d("PrivateFlow","Insertion: native accessibility input connection")
+            confirmInsertion(n,text)
+        } else {
+            // Native paste also operates on the real Editable rather than hints.
             (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Private dictation",text))
-            Toast.makeText(this,"Text field changed. Transcript copied — paste where you want it.",Toast.LENGTH_LONG).show()
+            if(n!!.performAction(AccessibilityNodeInfo.ACTION_PASTE))confirmInsertion(n,text)
+            else { copyTranscript(text,"Could not insert here. Transcript copied — paste where you want it.");finishInsertion() }
         }
-        resetIdle();target=null;amplitude=0f;updateLayout();syncFocus()
     } }
+    private fun copyTranscript(text:String,message:String) {
+        (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Private dictation",text))
+        Toast.makeText(this,message,Toast.LENGTH_LONG).show()
+    }
+    private fun confirmInsertion(n:AccessibilityNodeInfo,text:String) {
+        val pendingGeneration=generation
+        // commitText is asynchronous, including when our own tutorial is the editor.
+        main.postDelayed({
+            if(pendingGeneration!=generation)return@postDelayed
+            if(!n.refresh() || !(n.text?.toString()?.contains(text)?:false)) {
+                // Never retry insertion automatically: an editor may have accepted
+                // the commit without exposing the updated text to accessibility.
+                copyTranscript(text,"Could not confirm insertion. Transcript copied if you need it.")
+            }
+            finishInsertion()
+        },150)
+    }
+    private fun finishInsertion() { resetIdle();target=null;amplitude=0f;updateLayout();syncFocus() }
     fun failed(message:String,gen:Int) { main.post { if(gen!=generation)return@post;Toast.makeText(this,message,Toast.LENGTH_LONG).show();resetIdle();target=null;captureActive=false;updateLayout();syncFocus() } }
     override fun onInterrupt() { cancel() }
     override fun onDestroy() { cancel();hide();instance=null;super.onDestroy() }

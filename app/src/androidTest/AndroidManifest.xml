@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Private Flow insertion fixtures">
+    <activity android:name="dev.privateflow.fixtures.PlaceholderEditorActivity" android:exported="true" android:windowSoftInputMode="stateAlwaysVisible|adjustResize"/>
+  </application>
+</manifest>

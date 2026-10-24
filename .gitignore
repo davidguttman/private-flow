@@ -7,3 +7,15 @@
 /references/
 /evidence/
 __pycache__/
+
+# Local IDE files, installables and device/signing credentials
+/.idea/
+/.kotlin/
+*.apk
+*.aab
+*.zip
+*.jks
+*.keystore
+keystore.properties
+devices.json
+pairing-code

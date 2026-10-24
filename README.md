@@ -23,7 +23,7 @@ This is an independent implementation, not a patched Wispr APK. The bubble's col
 
 ## Build
 
-Requires JDK 17 or 21, Android SDK platform/build tools 35, Gradle 8.13.
+Requires JDK 17 or 21 and Android SDK platform/build tools 35. The Gradle wrapper supplies Gradle 8.13. Set `ANDROID_HOME` to your SDK directory or add `sdk.dir=/path/to/Android/sdk` in an untracked `local.properties`.
 
 ```
 ./gradlew :app:assembleDebug :app:lintDebug

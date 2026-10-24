@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -37,6 +39,47 @@ class MainActivity : Activity() {
         button("1 · Allow microphone") { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO,Manifest.permission.POST_NOTIFICATIONS),1) }
         button("2 · Allow floating bubble") { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:$packageName"))) }
         button("3 · Enable Private Flow accessibility") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        label("Bubble appearance",22f)
+        val appearance=getSharedPreferences("appearance",MODE_PRIVATE)
+        val preview=object:View(this) {
+            private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
+            override fun onDraw(canvas:Canvas) {
+                val scale=floatArrayOf(.7f,.85f,1f,1.15f)[appearance.getInt("size",1).coerceIn(0,3)]
+                val d=resources.displayMetrics.density*scale
+                canvas.save();canvas.translate(width/2f-26*d,height/2f-26*d);canvas.scale(d,d)
+                paint.color=Color.rgb(234,205,246);paint.alpha=appearance.getInt("opacity",100).coerceIn(20,100)*255/100
+                canvas.drawRoundRect(2f,2f,50f,50f,17f,17f,paint)
+                paint.color=Color.rgb(28,22,31);paint.alpha=appearance.getInt("opacity",100).coerceIn(20,100)*255/100;paint.strokeWidth=2f;paint.strokeCap=Paint.Cap.ROUND
+                floatArrayOf(9f,17f,12f,7f,20f).forEachIndexed { i,h -> canvas.drawLine(18f+i*4,26f-h/2,18f+i*4,26f+h/2,paint) }
+                canvas.restore()
+            }
+        }
+        body.addView(preview,LinearLayout.LayoutParams(-1,(84*resources.displayMetrics.density).toInt()))
+        fun updateAppearance() { preview.invalidate();FlowAccessibilityService.instance?.refreshAppearance() }
+        val sizes=intArrayOf(70,85,100,115)
+        val sizeLabel=label("Bubble size: ${sizes[appearance.getInt("size",1).coerceIn(0,3)]}%")
+        body.addView(SeekBar(this).apply {
+            contentDescription="Bubble size";max=3;progress=appearance.getInt("size",1).coerceIn(0,3)
+            setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar:SeekBar?,value:Int,fromUser:Boolean) { appearance.edit().putInt("size",value).apply();sizeLabel.text="Bubble size: ${sizes[value]}%";updateAppearance() }
+                override fun onStartTrackingTouch(bar:SeekBar?) {}
+                override fun onStopTrackingTouch(bar:SeekBar?) {}
+            })
+        })
+        val opacityLabel=label("Opacity: ${appearance.getInt("opacity",100)}%")
+        body.addView(SeekBar(this).apply {
+            contentDescription="Bubble opacity";min=20;max=100;progress=appearance.getInt("opacity",100).coerceIn(20,100)
+            setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar:SeekBar?,value:Int,fromUser:Boolean) { appearance.edit().putInt("opacity",value).apply();opacityLabel.text="Opacity: $value%";updateAppearance() }
+                override fun onStartTrackingTouch(bar:SeekBar?) {}
+                override fun onStopTrackingTouch(bar:SeekBar?) {}
+            })
+        })
+        body.addView(Switch(this).apply {
+            text="Shrink to a dot after 5 seconds";isChecked=appearance.getBoolean("shrink",true)
+            setOnCheckedChangeListener { _,enabled -> appearance.edit().putBoolean("shrink",enabled).apply();updateAppearance() }
+        })
+        label("Changes save automatically and apply to the floating bubble immediately.",14f)
         label("Connect your computer",22f)
         val url=EditText(this).apply { hint="http://100.x.x.x:8767"; setSingleLine(); inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; setText(prefs.getString("url","")); body.addView(this) }
         val token=EditText(this).apply { hint="Pairing code"; setSingleLine(); inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; body.addView(this) }

@@ -1,6 +1,7 @@
 package dev.privateflow
 
 import android.Manifest
+import android.animation.ValueAnimator
 import android.accessibilityservice.AccessibilityService
 import android.content.*
 import android.content.pm.PackageManager
@@ -28,6 +29,31 @@ class FlowAccessibilityService : AccessibilityService() {
     private var bubbleY=0
     private var bubbleRight=true
     private var captureActive=false
+    private val appearance by lazy { getSharedPreferences("appearance",0) }
+    private var idleProgress=0f
+    private var idleAnimation:ValueAnimator?=null
+    private var touching=false
+    private val shrinkAfterIdle=Runnable {
+        if(state=="idle" && !touching && bubble!=null && appearance.getBoolean("shrink",true)) {
+            idleAnimation?.cancel()
+            idleAnimation=ValueAnimator.ofFloat(idleProgress,1f).apply {
+                duration=180
+                addUpdateListener { idleProgress=it.animatedValue as Float;updateLayout() }
+                start()
+            }
+        }
+    }
+    private fun sizeScale()=floatArrayOf(.7f,.85f,1f,1.15f)[appearance.getInt("size",1).coerceIn(0,3)]
+    private fun scheduleIdleShrink() {
+        main.removeCallbacks(shrinkAfterIdle)
+        if(state=="idle" && !touching && bubble!=null && appearance.getBoolean("shrink",true))main.postDelayed(shrinkAfterIdle,5000)
+    }
+    private fun expandBubble() {
+        main.removeCallbacks(shrinkAfterIdle);idleAnimation?.cancel();idleAnimation=null;idleProgress=0f
+        if(bubble!=null)updateLayout()
+    }
+    private fun resetIdle() { state="idle";expandBubble();scheduleIdleShrink() }
+    fun refreshAppearance() { main.post { expandBubble();scheduleIdleShrink() } }
     var amplitude=0f
     override fun onServiceConnected() { instance=this; wm=getSystemService(WINDOW_SERVICE) as WindowManager; bubbleY=resources.displayMetrics.heightPixels/2; syncFocus() }
     override fun onAccessibilityEvent(event:AccessibilityEvent?) { if(state=="idle")syncFocus() }
@@ -54,28 +80,33 @@ class FlowAccessibilityService : AccessibilityService() {
     private fun dp(v:Float)=(v*resources.displayMetrics.density).roundToInt()
     private fun show() {
         if(bubble!=null)return
+        idleProgress=0f
         val v=BubbleView(this); bubble=v
         val p=WindowManager.LayoutParams(dp(52f),dp(52f),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,PixelFormat.TRANSLUCENT)
         p.title="Private Flow Bubble"
         p.gravity=Gravity.TOP or Gravity.LEFT;p.x=if(bubbleRight)resources.displayMetrics.widthPixels-dp(60f) else dp(8f);p.y=bubbleY
-        try { wm.addView(v,p) } catch(e:Exception) { bubble=null }
+        try { wm.addView(v,p);updateLayout();scheduleIdleShrink() } catch(e:Exception) { bubble=null }
     }
-    private fun hide() { bubble?.let { runCatching { wm.removeView(it) } };bubble=null }
+    private fun hide() { main.removeCallbacks(shrinkAfterIdle);idleAnimation?.cancel();idleAnimation=null;idleProgress=0f;touching=false;bubble?.let { runCatching { wm.removeView(it) } };bubble=null }
     private fun updateLayout() {
         val v=bubble?:return
         val p=v.layoutParams as WindowManager.LayoutParams
         val expanded=state!="idle"
-        p.width=dp(if(expanded)180f else 52f);p.height=dp(52f)
+        val scale=sizeScale()
+        val side=if(expanded)52f else 52f-28f*idleProgress
+        p.width=dp((if(expanded)180f else side)*scale);p.height=dp(side*scale)
+        p.alpha=appearance.getInt("opacity",100).coerceIn(20,100)/100f
         p.x=if(bubbleRight)resources.displayMetrics.widthPixels-p.width-dp(8f) else dp(8f)
-        p.y=bubbleY.coerceIn(dp(35f),resources.displayMetrics.heightPixels-dp(110f))
+        p.y=(bubbleY+dp((52f-side)*scale/2)).coerceIn(dp(35f),resources.displayMetrics.heightPixels-dp(110f))
         wm.updateViewLayout(v,p); v.invalidate()
     }
     private fun fieldText(n:AccessibilityNodeInfo)=if(n.isShowingHintText) "" else n.text?.toString()?:""
     fun startCapture(hold:Boolean) {
         if(state!="idle")return
+        expandBubble()
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED || !getSharedPreferences("connection",0).contains("token")) {
-            startActivity(Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return
+            startActivity(Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));scheduleIdleShrink();return
         }
         val n=focused()
         if(!eligible(n))return
@@ -88,7 +119,7 @@ class FlowAccessibilityService : AccessibilityService() {
         if(state!="recording" && state!="holding")return
         state="transcribing";captureActive=false;updateLayout();CaptureService.instance?.finish(false)
     }
-    fun cancel() { generation++;captureActive=false;CaptureService.instance?.finish(true);state="idle";amplitude=0f;target=null;updateLayout();syncFocus() }
+    fun cancel() { generation++;captureActive=false;CaptureService.instance?.finish(true);resetIdle();amplitude=0f;target=null;updateLayout();syncFocus() }
     fun currentGeneration()=sessionGeneration
     fun captured(text:String, gen:Int) { main.post {
         if(gen!=generation)return@post
@@ -109,9 +140,9 @@ class FlowAccessibilityService : AccessibilityService() {
             (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Private dictation",text))
             Toast.makeText(this,"Text field changed. Transcript copied — paste where you want it.",Toast.LENGTH_LONG).show()
         }
-        state="idle";target=null;amplitude=0f;updateLayout();syncFocus()
+        resetIdle();target=null;amplitude=0f;updateLayout();syncFocus()
     } }
-    fun failed(message:String,gen:Int) { main.post { if(gen!=generation)return@post;Toast.makeText(this,message,Toast.LENGTH_LONG).show();state="idle";target=null;captureActive=false;updateLayout();syncFocus() } }
+    fun failed(message:String,gen:Int) { main.post { if(gen!=generation)return@post;Toast.makeText(this,message,Toast.LENGTH_LONG).show();resetIdle();target=null;captureActive=false;updateLayout();syncFocus() } }
     override fun onInterrupt() { cancel() }
     override fun onDestroy() { cancel();hide();instance=null;super.onDestroy() }
 
@@ -127,7 +158,7 @@ class FlowAccessibilityService : AccessibilityService() {
         override fun performClick():Boolean { super.performClick();if(state=="idle")startCapture(false);return true }
         override fun onTouchEvent(e:MotionEvent):Boolean {
             when(e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { downX=e.rawX;downY=e.rawY;originY=bubbleY;downAt=SystemClock.uptimeMillis();moved=false;holding=false;if(state=="idle")main.postDelayed(longPress,350);return true }
+                MotionEvent.ACTION_DOWN -> { touching=true;expandBubble();downX=e.rawX;downY=e.rawY;originY=bubbleY;downAt=SystemClock.uptimeMillis();moved=false;holding=false;if(state=="idle")main.postDelayed(longPress,350);return true }
                 MotionEvent.ACTION_MOVE -> {
                     if(!holding && state=="idle" && hypot((e.rawX-downX).toDouble(),(e.rawY-downY).toDouble())>dp(10f))moved=true
                     if(moved) { main.removeCallbacks(longPress);bubbleY=originY+(e.rawY-downY).roundToInt();bubbleRight=e.rawX>resources.displayMetrics.widthPixels/2;updateLayout() };return true
@@ -135,26 +166,34 @@ class FlowAccessibilityService : AccessibilityService() {
                 MotionEvent.ACTION_UP -> {
                     main.removeCallbacks(longPress)
                     if(holding)finish()
-                    else if(!moved)when(state) { "idle" -> performClick();"recording" -> if(e.x<dp(52f))cancel() else if(e.x>width-dp(52f))finish();"transcribing" -> if(e.x<dp(52f))cancel() }
-                    holding=false;return true
+                    else if(!moved)when(state) { "idle" -> performClick();"recording" -> if(e.x<dp(52f*sizeScale()))cancel() else if(e.x>width-dp(52f*sizeScale()))finish();"transcribing" -> if(e.x<dp(52f*sizeScale()))cancel() }
+                    holding=false;touching=false;scheduleIdleShrink();return true
                 }
-                MotionEvent.ACTION_CANCEL -> { main.removeCallbacks(longPress);if(holding)cancel();holding=false;return true }
+                MotionEvent.ACTION_CANCEL -> { main.removeCallbacks(longPress);if(holding)cancel();holding=false;touching=false;scheduleIdleShrink();return true }
             }
             return true
         }
         override fun onDraw(canvas:Canvas) {
             super.onDraw(canvas)
-            val d=resources.displayMetrics.density
+            val d=resources.displayMetrics.density*sizeScale()
             canvas.save();canvas.scale(d,d)
             val w=width/d
             fun round(l:Float,t:Float,r:Float,b:Float,radius:Float,color:Int) { paint.color=color;paint.style=Paint.Style.FILL;canvas.drawRoundRect(l,t,r,b,radius,radius,paint) }
             paint.strokeWidth=2f;paint.strokeCap=Paint.Cap.ROUND
             if(state=="idle") {
                 contentDescription="Start private dictation"
-                round(2f,2f,50f,50f,17f,lavender)
-                val bars=floatArrayOf(9f,17f,12f,7f,20f)
-                paint.color=ink
-                bars.forEachIndexed { i,h -> canvas.drawLine(18f+i*4,26f-h/2,18f+i*4,26f+h/2,paint) }
+                contentDescription=if(idleProgress>.95f)"Private dictation dot. Tap or hold to record" else "Start private dictation"
+                val side=52f-28f*idleProgress
+                val visual=48f-36f*idleProgress
+                val inset=(side-visual)/2
+                round(inset,inset,side-inset,side-inset,17f-11f*idleProgress,lavender)
+                if(idleProgress<1f) {
+                    val bars=floatArrayOf(9f,17f,12f,7f,20f)
+                    paint.color=ink;paint.alpha=((1f-idleProgress)*255).roundToInt()
+                    val center=side/2
+                    bars.forEachIndexed { i,h -> canvas.drawLine(center-8f+i*4,center-h/2,center-8f+i*4,center+h/2,paint) }
+                    paint.alpha=255
+                }
             } else {
                 contentDescription=if(state=="transcribing")"Transcribing. Left: cancel" else "Recording. Left: cancel. Right: done"
                 round(2f,2f,50f,50f,24f,lavender)

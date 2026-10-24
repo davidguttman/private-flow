@@ -6,6 +6,8 @@ Android floating-bubble dictation with local Voxtype transcription on your own c
 
 - Keeps your existing keyboard.
 - Shows a draggable lavender bubble beside eligible focused text fields.
+- Shrinks to an animated small dot after 5 seconds idle; tap or hold starts dictation directly. Shrinking pauses while interacting, recording, or transcribing.
+- Saves bubble size (70%, 85%, 100%, 115%), opacity (20–100%), and idle-shrink preference immediately, with a live preview.
 - Tap to record, then ✓ to finish; hold to record and release to finish; X cancels.
 - Shows a live microphone waveform and an Android recording notification.
 - Sends 16-kHz mono PCM WAV over your encrypted Tailscale connection.

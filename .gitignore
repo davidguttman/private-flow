@@ -4,6 +4,6 @@
 *.env
 *.key
 /bridge/.venv/
-/references/*.mp4
+/references/
 /evidence/
 __pycache__/

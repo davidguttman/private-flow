@@ -2,6 +2,7 @@
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +21,8 @@ from google.protobuf.empty_pb2 import Empty
 ADB='adb'
 DEVICE='emulator-5556'
 ROOT=Path(__file__).resolve().parents[1]
+if not Path(os.environ.get('PRIVATE_FLOW_TEST_WAV','')).is_file():
+    raise SystemExit('Set PRIVATE_FLOW_TEST_WAV to a spoken 16-kHz mono WAV fixture')
 
 def adb(*args):
     return subprocess.check_output([ADB,'-s',DEVICE,*args],stderr=subprocess.STDOUT)
@@ -86,7 +89,7 @@ with tempfile.TemporaryDirectory() as state:
     grpc_token=next(line.partition('=')[2].strip() for line in ini.splitlines() if line.startswith('grpc.token'))
     metadata=(('authorization','Bearer '+grpc_token),)
     client.setMicrophoneState(pb.MicrophoneState(realAudioEnabled=False),metadata=metadata)
-    with wave.open('/path/to/synthetic-test.wav','rb') as w:pcm=w.readframes(w.getnframes())
+    with wave.open(os.environ['PRIVATE_FLOW_TEST_WAV'],'rb') as w:pcm=w.readframes(w.getnframes())
     fmt=pb.AudioFormat(samplingRate=16000,channels=pb.AudioFormat.Mono,format=pb.AudioFormat.AUD_FMT_S16)
     def packets():
         for offset in range(0,len(pcm),3200):

@@ -6,10 +6,11 @@ Android floating-bubble dictation with local Voxtype transcription on your own c
 
 - Keeps your existing keyboard.
 - Shows a draggable lavender bubble beside eligible focused text fields.
-- Shrinks to an animated small dot after 5 seconds idle; tap or hold starts dictation directly. Shrinking pauses while interacting, recording, or transcribing.
+- Shrinks to an animated small dot after 5 seconds idle; tap or hold starts dictation directly. Shrinking pauses while interacting, recording, or transcribing. The dot keeps a stable touch target of at least 48 dp; opacity changes only the artwork, never the input window.
 - Saves bubble size (70%, 85%, 100%, 115%), opacity (20–100%), and idle-shrink preference immediately, with a live preview.
 - Tap to record, then ✓ to finish; hold to record and release to finish; X cancels.
 - Shows a live microphone waveform and an Android recording notification.
+- Replaces Done with a spinner and “Transcribing” immediately after submission; only Cancel remains active until the result arrives.
 - Sends 16-kHz mono PCM WAV over your encrypted Tailscale connection.
 - Runs the installed Voxtype with an explicitly local Whisper configuration.
 - Inserts at the original selection, preserving surrounding text.
@@ -58,6 +59,8 @@ Only captured audio goes to the bridge; existing editor text stays on Android. T
 ## Verification
 
 `python -m unittest discover -s bridge -v` checks authentication, code reuse rejection, hashed credential storage, malformed WAV rejection, and busy handling. Set `PRIVATE_FLOW_TEST_WAV` to a spoken WAV fixture for real Voxtype integration; `PRIVATE_FLOW_EXPECTED_TEXT` sets its expected phrase.
+
+`scripts/verify_touch_regression.py` (also available through `scripts/verify_appearance.py`) exercises actual bubble/dot taps across opacity and size settings, stable minimum hit targets, and Done-to-progress behavior against a deliberately delayed local HTTP fixture. It checks that repeated Done-area presses submit only once and that the returned text is inserted. This fixture tests Android interactions, not Voxtype inference.
 
 `scripts/verify_emulator.py` additionally exercises actual Android pairing, overlay controls, foreground microphone capture, emulator microphone injection, Voxtype transcription, and field insertion. It currently targets the locally installed API-35 Pixel-7 emulator and uses its authenticated gRPC control endpoint. Its prerequisites and fixture are local test infrastructure, not APK runtime dependencies.
 

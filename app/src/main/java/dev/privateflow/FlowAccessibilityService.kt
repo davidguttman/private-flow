@@ -94,11 +94,14 @@ class FlowAccessibilityService : AccessibilityService() {
         val p=v.layoutParams as WindowManager.LayoutParams
         val expanded=state!="idle"
         val scale=sizeScale()
-        val side=if(expanded)52f else 52f-28f*idleProgress
-        p.width=dp((if(expanded)180f else side)*scale);p.height=dp(side*scale)
-        p.alpha=appearance.getInt("opacity",100).coerceIn(20,100)/100f
+        // Fade the artwork, not the input window. Keep an accessible, stable
+        // hit target even when the artwork is a tiny low-opacity dot.
+        val touchSide=max(48f,52f*scale)
+        p.width=dp(if(expanded)180f*scale else touchSide);p.height=dp(touchSide)
+        p.alpha=1f
+        v.alpha=appearance.getInt("opacity",100).coerceIn(20,100)/100f
         p.x=if(bubbleRight)resources.displayMetrics.widthPixels-p.width-dp(8f) else dp(8f)
-        p.y=(bubbleY+dp((52f-side)*scale/2)).coerceIn(dp(35f),resources.displayMetrics.heightPixels-dp(110f))
+        p.y=bubbleY.coerceIn(dp(35f),resources.displayMetrics.heightPixels-dp(110f))
         wm.updateViewLayout(v,p); v.invalidate()
     }
     private fun fieldText(n:AccessibilityNodeInfo)=if(n.isShowingHintText) "" else n.text?.toString()?:""
@@ -176,14 +179,17 @@ class FlowAccessibilityService : AccessibilityService() {
         override fun onDraw(canvas:Canvas) {
             super.onDraw(canvas)
             val d=resources.displayMetrics.density*sizeScale()
-            canvas.save();canvas.scale(d,d)
-            val w=width/d
+            val w=if(state=="idle")52f else 180f
+            canvas.save()
+            canvas.translate((width-w*d)/2,(height-52f*d)/2)
+            canvas.scale(d,d)
             fun round(l:Float,t:Float,r:Float,b:Float,radius:Float,color:Int) { paint.color=color;paint.style=Paint.Style.FILL;canvas.drawRoundRect(l,t,r,b,radius,radius,paint) }
             paint.strokeWidth=2f;paint.strokeCap=Paint.Cap.ROUND
             if(state=="idle") {
-                contentDescription="Start private dictation"
                 contentDescription=if(idleProgress>.95f)"Private dictation dot. Tap or hold to record" else "Start private dictation"
                 val side=52f-28f*idleProgress
+                // Center the shrinking artwork inside the unchanged touch box.
+                canvas.translate((52f-side)/2,(52f-side)/2)
                 val visual=48f-36f*idleProgress
                 val inset=(side-visual)/2
                 round(inset,inset,side-inset,side-inset,17f-11f*idleProgress,lavender)
@@ -195,7 +201,21 @@ class FlowAccessibilityService : AccessibilityService() {
                     paint.alpha=255
                 }
             } else {
-                contentDescription=if(state=="transcribing")"Transcribing. Left: cancel" else "Recording. Left: cancel. Right: done"
+                if(state=="transcribing") {
+                    contentDescription="Transcribing audio. Left: cancel"
+                    round(2f,2f,50f,50f,24f,lavender)
+                    round(55f,2f,w-2f,50f,24f,lavender)
+                    paint.color=ink
+                    canvas.drawLine(21f,21f,31f,31f,paint);canvas.drawLine(31f,21f,21f,31f,paint)
+                    paint.style=Paint.Style.STROKE
+                    canvas.drawArc(RectF(65f,19f,79f,33f),(SystemClock.uptimeMillis()%1000)*.36f,270f,false,paint)
+                    paint.style=Paint.Style.FILL;paint.textSize=12f
+                    canvas.drawText("Transcribing",86f,30f,paint)
+                    postInvalidateDelayed(45)
+                    canvas.restore()
+                    return
+                }
+                contentDescription="Recording. Left: cancel. Right: done"
                 round(2f,2f,50f,50f,24f,lavender)
                 round(55f,2f,w-55f,50f,24f,lavender)
                 if(state!="holding")round(w-50f,2f,w-2f,50f,24f,cream)

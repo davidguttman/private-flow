@@ -52,6 +52,12 @@ class CaptureService:Service() {
             }
             mic.stop();mic.release();recorder=null
             if(!cancelled) {
+                if(checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)==android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(1,
+                        Notification.Builder(this,"dictation").setContentTitle("Transcribing on your computer")
+                            .setContentText("Recording stopped. Waiting for your private transcript.")
+                            .setSmallIcon(android.R.drawable.ic_btn_speak_now).build())
+                }
                 Handler(Looper.getMainLooper()).post { FlowAccessibilityService.instance?.finish() }
                 val data=pcm.toByteArray()
                 require(data.size>=3200) { "Recording too short — try again" }

@@ -13,6 +13,7 @@ Android floating-bubble dictation with local Voxtype transcription on your own c
 - Replaces Done with a spinner and “Transcribing” immediately after submission; only Cancel remains active until the result arrives.
 - Sends 16-kHz mono PCM WAV over your encrypted Tailscale connection.
 - Runs the installed Voxtype with an explicitly local Whisper configuration.
+- Removes pause ellipses (`...` / `…`) locally after transcription, without rewriting words or changing ordinary sentence punctuation and paragraph breaks.
 - Inserts through Android’s accessibility editing connection at the original selection, preserving actual surrounding text. Placeholder strings exposed as accessibility text are never copied into the editor. Your existing keyboard remains selected; native paste is the fallback when an editing connection is unavailable.
 - If the field, selection, or existing content changes, copies the transcript instead of inserting into an unexpected destination.
 - Hides in password, number, date/time, and phone-number fields.

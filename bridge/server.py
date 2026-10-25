@@ -7,6 +7,7 @@ import io
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -18,6 +19,19 @@ import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MAX_AUDIO = 16000 * 2 * 300 + 4096
+
+# Mechanical formatting only: remove pause ellipses, never rewrite words or
+# infer sentence boundaries. Preserve line breaks and punctuation outside them.
+_PAUSE_ELLIPSES = re.compile(r"[ \t]*(?:\.{3,}|…)(?:[ \t]*(?:\.{3,}|…))*[ \t]*")
+
+def clean_pause_ellipses(text):
+    def replacement(match):
+        left = text[match.start()-1] if match.start() else ""
+        right = text[match.end()] if match.end() < len(text) else ""
+        if not left or not right or left in "\r\n([{“" or right in "\r\n,.;:!?)]}”":
+            return ""
+        return " "
+    return _PAUSE_ELLIPSES.sub(replacement, text)
 
 class BridgeServer(ThreadingHTTPServer):
     daemon_threads = True
@@ -130,7 +144,7 @@ class Handler(BaseHTTPRequestHandler):
                 preamble, separator, text = result.stdout.partition('\n\n')
                 if not separator or not preamble.startswith('Loading audio file:') or 'Processing ' not in preamble:
                     return self.reply(503, {'error': 'Unexpected Voxtype output format'})
-                text = text.strip()
+                text = clean_pause_ellipses(text.strip())
                 self.reply(200, {'text': text})
         except (ValueError, wave.Error, EOFError) as error:
             self.reply(400, {'error': str(error)})

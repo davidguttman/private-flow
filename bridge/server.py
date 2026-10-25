@@ -17,6 +17,7 @@ import threading
 import time
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from voxtype_settings import default_config_path, read_settings, apply_text_settings, SettingsError
 
 MAX_AUDIO = 16000 * 2 * 300 + 4096
 
@@ -35,7 +36,7 @@ def clean_pause_ellipses(text):
 
 class BridgeServer(ThreadingHTTPServer):
     daemon_threads = True
-    def __init__(self, address, state_dir, config):
+    def __init__(self, address, state_dir, config=None):
         self.state_dir = Path(state_dir)
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.state_dir, 0o700)
@@ -49,7 +50,7 @@ class BridgeServer(ThreadingHTTPServer):
         self.pair_attempts = {}
         self.lock = threading.Lock()
         self.transcription = threading.BoundedSemaphore(1)
-        self.config = config
+        self.config = str(Path(config).expanduser()) if config else str(default_config_path())
         self.voxtype = shutil.which('voxtype')
         if not self.voxtype:
             raise RuntimeError('voxtype is not installed')
@@ -134,18 +135,27 @@ class Handler(BaseHTTPRequestHandler):
             # Private RAM-backed scratch file, removed on every exit path.
             scratch = '/dev/shm' if Path('/dev/shm').is_dir() else None
             with tempfile.TemporaryDirectory(prefix='private-flow-', dir=scratch) as directory:
+                config_source, settings = read_settings(self.server.config)
+                # Snapshot the existing settings for this request, not a second
+                # profile. This also prevents changes between privacy validation
+                # and the Voxtype process reading its settings.
+                config_snapshot = Path(directory) / 'voxtype.toml'
+                config_snapshot.write_text(config_source)
+                os.chmod(config_snapshot, 0o600)
                 source = Path(directory) / 'audio.wav'
                 source.write_bytes(data)
                 os.chmod(source, 0o600)
-                cmd = [self.server.voxtype, '-q', '--config', self.server.config, 'transcribe', str(source)]
+                cmd = [self.server.voxtype, '-q', '--config', str(config_snapshot), 'transcribe', str(source)]
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=110)
                 if result.returncode:
-                    return self.reply(503, {'error': 'Local Voxtype transcription failed'})
+                    raise SettingsError('Local Voxtype transcription failed')
                 preamble, separator, text = result.stdout.partition('\n\n')
                 if not separator or not preamble.startswith('Loading audio file:') or 'Processing ' not in preamble:
-                    return self.reply(503, {'error': 'Unexpected Voxtype output format'})
-                text = clean_pause_ellipses(text.strip())
-                self.reply(200, {'text': text})
+                    raise SettingsError('Unexpected Voxtype output format')
+                text = clean_pause_ellipses(apply_text_settings(text.strip(),settings))
+            self.reply(200, {'text': text})
+        except SettingsError as error:
+            self.reply(503, {'error': str(error)})
         except (ValueError, wave.Error, EOFError) as error:
             self.reply(400, {'error': str(error)})
         except subprocess.TimeoutExpired:
@@ -188,7 +198,7 @@ if __name__ == '__main__':
     parser.add_argument('--bind', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8767)
     parser.add_argument('--state-dir', default=str(Path.home()/'.local/share/private-flow'))
-    parser.add_argument('--config', default=str(Path(__file__).with_name('voxtype.toml')))
+    parser.add_argument('--config', help='Override the existing Voxtype config path (default: your normal Voxtype configuration)')
     args = parser.parse_args()
     address = ipaddress.ip_address(args.bind)
     if not address.is_loopback and address not in ipaddress.ip_network('100.64.0.0/10'):

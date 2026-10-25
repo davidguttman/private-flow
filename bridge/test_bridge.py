@@ -16,7 +16,7 @@ class BridgeTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
         with contextlib.redirect_stdout(io.StringIO()):
-            cls.server = BridgeServer(('127.0.0.1', 0), cls.temp.name, str(Path(__file__).with_name('voxtype.toml')))
+            cls.server = BridgeServer(('127.0.0.1', 0), cls.temp.name, str(Path(__file__).parent/'testdata'/'voxtype.toml'))
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         cls.url = f'http://127.0.0.1:{cls.server.server_port}'
         cls.token = None

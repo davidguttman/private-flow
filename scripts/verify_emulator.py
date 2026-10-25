@@ -55,7 +55,7 @@ Handler.reply=capture_reply
 
 with tempfile.TemporaryDirectory() as state:
     with contextlib.redirect_stdout(io.StringIO()):
-        server=BridgeServer(('127.0.0.1',8768),state,str(ROOT/'bridge/voxtype.toml'))
+        server=BridgeServer(('127.0.0.1',8768),state,str(ROOT/'bridge/testdata/voxtype.toml'))
     threading.Thread(target=server.serve_forever,daemon=True).start()
     adb('reverse','tcp:8768','tcp:8768')
     shell('am','start','--activity-clear-top','-n','dev.privateflow/.MainActivity')

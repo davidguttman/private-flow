@@ -12,7 +12,7 @@ Android floating-bubble dictation with local Voxtype transcription on your own c
 - Shows a live microphone waveform and an Android recording notification.
 - Replaces Done with a spinner and “Transcribing” immediately after submission; only Cancel remains active until the result arrives.
 - Sends 16-kHz mono PCM WAV over your encrypted Tailscale connection.
-- Runs the installed Voxtype with an explicitly local Whisper configuration.
+- Uses the host’s existing Voxtype configuration by default: model, language, local engine, spoken punctuation, word replacements, and configured post-processing command. No separate phone profile is created.
 - Removes pause ellipses (`...` / `…`) locally after transcription, without rewriting words or changing ordinary sentence punctuation and paragraph breaks.
 - Inserts through Android’s accessibility editing connection at the original selection, preserving actual surrounding text. Placeholder strings exposed as accessibility text are never copied into the editor. Your existing keyboard remains selected; native paste is the fallback when an editing connection is unavailable.
 - If the field, selection, or existing content changes, copies the transcript instead of inserting into an unexpected destination.
@@ -34,11 +34,15 @@ The sideloadable APK is at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Run the bridge
 
-Requires Python 3.11+ and an installed `voxtype` with the `large-v3-turbo` model downloaded. No Python dependencies.
+Requires Python 3.11+ and an installed, configured `voxtype` that already works locally, including its configured model. No Python dependencies.
 
 ```
 python bridge/server.py --bind YOUR_TAILSCALE_IP --port 8767
 ```
+
+By default the bridge reads `$XDG_CONFIG_HOME/voxtype/config.toml` (normally `~/.config/voxtype/config.toml`) on every request. Changes to that normal configuration apply to the next phone dictation. `--config /path/to/config.toml` is only an explicit override. The old bridge-only config is now a test fixture, not an application default.
+
+Because Voxtype 0.6.0’s file command skips its daemon text stage, the bridge applies the configured spoken punctuation, explicit replacement dictionary, and `output.post_process` command before the requested pause-ellipsis cleanup. Desktop typing, clipboard delivery, hotkeys, and pre/post-output hooks are not run on the computer; text is returned to the phone. Configured post-processing commands run as configured, so keep those commands local for private processing. Remote transcription backends are rejected rather than silently sending phone audio elsewhere.
 
 The bridge only accepts loopback or Tailscale CGNAT bind addresses. Do not expose this HTTP endpoint via public forwarding: transport encryption is provided by Tailscale. The Android app rejects ordinary unencrypted public/LAN endpoints and does not follow redirects.
 
@@ -61,7 +65,7 @@ Only captured audio goes to the bridge; existing editor text stays on Android. T
 
 `./gradlew :app:assembleDebugAndroidTest` builds a separate editor-fixture APK, never bundled into the shipped app. `scripts/verify_placeholder_insertion.py` first reproduces the old unmarked-Message-placeholder append using 0.2.1, then verifies empty fields, unmarked hints with/without hint metadata, actual typed Message, middle insertion, and selected-text replacement against the current APK. It uses real Android editing/microphone capture with a loopback transcript fixture and checks that the normal keyboard remains unchanged.
 
-`python -m unittest discover -s bridge -v` checks authentication, code reuse rejection, hashed credential storage, malformed WAV rejection, and busy handling. Set `PRIVATE_FLOW_TEST_WAV` to a spoken WAV fixture for real Voxtype integration; `PRIVATE_FLOW_EXPECTED_TEXT` sets its expected phrase.
+`python -m unittest discover -s bridge -v` checks authentication, code reuse rejection, hashed credential storage, malformed WAV rejection, inherited config / live config changes / text processing, private temporary-config cleanup, remote-backend rejection, and pause formatting. Set `PRIVATE_FLOW_TEST_WAV` to a spoken WAV fixture for real Voxtype integration; `PRIVATE_FLOW_EXPECTED_TEXT` sets its expected phrase.
 
 `scripts/verify_touch_regression.py` (also available through `scripts/verify_appearance.py`) exercises actual bubble/dot taps across opacity and size settings, stable minimum hit targets, and Done-to-progress behavior against a deliberately delayed local HTTP fixture. It checks that repeated Done-area presses submit only once and that the returned text is inserted. This fixture tests Android interactions, not Voxtype inference.
 

@@ -39,7 +39,7 @@ class PauseCleanupTests(unittest.TestCase):
     def test_authenticated_http_response_is_cleaned(self):
         with tempfile.TemporaryDirectory() as state:
             with contextlib.redirect_stdout(io.StringIO()):
-                server=BridgeServer(('127.0.0.1',0),state,str(Path(__file__).with_name('voxtype.toml')))
+                server=BridgeServer(('127.0.0.1',0),state,str(Path(__file__).parent/'testdata'/'voxtype.toml'))
             worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
             base=f'http://127.0.0.1:{server.server_port}'
             try:

@@ -2,6 +2,7 @@
 /local.properties
 **/build/
 *.env
+.env.*
 *.key
 /bridge/.venv/
 /references/
@@ -19,3 +20,18 @@ __pycache__/
 keystore.properties
 devices.json
 pairing-code
+
+# Private recordings and derived audio fixtures stay local
+*.[wW][aA][vV]
+*.[wW][aA][vV][eE]
+*.[pP][cC][mM]
+*.[rR][aA][wW]
+*.[mM][pP]3
+*.[mM]4[aA]
+*.[aA][aA][cC]
+*.[fF][lL][aA][cC]
+*.[oO][gG][gG]
+*.[oO][pP][uU][sS]
+*.[aA][iI][fF]
+*.[aA][iI][fF][fF]
+*.[wW][eE][bB][mM]

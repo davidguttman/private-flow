@@ -7,10 +7,12 @@ import subprocess
 import threading
 import time
 import xml.etree.ElementTree as ET
+from verification_support import adb_command, required_file
 
+BASELINE_APK=required_file('PRIVATE_FLOW_BASELINE_APK', 'the Private Flow 0.2.1 baseline APK')
+ADB=adb_command()
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'evidence'/'insertion-0.2.2';OUT.mkdir(parents=True,exist_ok=True)
-ADB=['adb','-s','emulator-5556']
 transcript='Dictation.'
 received=threading.Event()
 class Backend(BaseHTTPRequestHandler):
@@ -60,7 +62,7 @@ try:
     adb('reverse','tcp:8768','tcp:8768')
     original_keyboard=sh('settings','get','secure','default_input_method')
     # Same lying accessibility node, same real input field and recording path.
-    adb('install','-r','-d','/path/to/PrivateFlow-0.2.1.apk');rebind()
+    adb('install','-r','-d',str(BASELINE_APK));rebind()
     baseline=exercise('unmarked-no-hint')
     assert baseline==transcript+'Message',repr(baseline)
     print('Reproduced 0.2.1 placeholder append:',repr(baseline),flush=True)

@@ -11,11 +11,12 @@ import urllib.request
 import wave
 from server import BridgeServer, clean_pause_ellipses
 
-RAW="Synthetic robots... ...assemble widgets. And... ...they're still... ...testing them."
-CLEAN="Synthetic robots assemble widgets. And they're still testing them."
+# Synthetic fixture: repeated pause groups within and between sentences.
+RAW="Test robot's... ...sample. And... ...it's still... ...counting widgets."
+CLEAN="Test robot's sample. And it's still counting widgets."
 
 class PauseCleanupTests(unittest.TestCase):
-    def test_synthetic_example(self):
+    def test_synthetic_repeated_pause_groups(self):
         self.assertEqual(clean_pause_ellipses(RAW),CLEAN)
 
     def test_unicode_and_adjacent_words(self):

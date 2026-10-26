@@ -9,8 +9,9 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from PIL import Image
+from verification_support import adb_command
 
-ADB=['adb','-s','emulator-5556']
+ADB=adb_command()
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'evidence'/'touch-0.2.1'
 OUT.mkdir(parents=True,exist_ok=True)

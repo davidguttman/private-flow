@@ -12,20 +12,25 @@ import time
 import wave
 import xml.etree.ElementTree as ET
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'bridge'))
-sys.path.insert(0,'/tmp/private-flow-protos')
+from verification_support import adb_command, required_file, emulator_grpc_ini
 from server import BridgeServer, Handler
-import grpc
-import emulator_controller_pb2 as pb
-import emulator_controller_pb2_grpc as rpc
-from google.protobuf.empty_pb2 import Empty
-ADB='adb'
-DEVICE='emulator-5556'
+ADB=adb_command()
+TEST_WAV=required_file('PRIVATE_FLOW_TEST_WAV', 'a spoken 16-kHz mono WAV fixture')
+EMULATOR_INI=emulator_grpc_ini()
+if os.environ.get('PRIVATE_FLOW_EMULATOR_PROTO_DIR'):
+    sys.path.insert(0,str(Path(os.environ['PRIVATE_FLOW_EMULATOR_PROTO_DIR']).expanduser()))
+try:
+    import grpc
+    import emulator_controller_pb2 as pb
+    import emulator_controller_pb2_grpc as rpc
+    from google.protobuf.empty_pb2 import Empty
+except ImportError as error:
+    raise SystemExit('Install grpcio and protobuf, and set PRIVATE_FLOW_EMULATOR_PROTO_DIR to the generated Android emulator Python gRPC modules (or put them on PYTHONPATH)') from error
 ROOT=Path(__file__).resolve().parents[1]
-if not Path(os.environ.get('PRIVATE_FLOW_TEST_WAV','')).is_file():
-    raise SystemExit('Set PRIVATE_FLOW_TEST_WAV to a spoken 16-kHz mono WAV fixture')
+(ROOT/'evidence').mkdir(parents=True,exist_ok=True)
 
 def adb(*args):
-    return subprocess.check_output([ADB,'-s',DEVICE,*args],stderr=subprocess.STDOUT)
+    return subprocess.check_output(ADB+list(args),stderr=subprocess.STDOUT)
 
 def shell(*args):return adb('shell',*args).decode()
 
@@ -84,12 +89,12 @@ with tempfile.TemporaryDirectory() as state:
     screenshot('bubble-recording.png')
     logs=shell('dumpsys','activity','services','dev.privateflow')
     assert 'CaptureService' in logs,'Recording foreground service did not start'
-    client=rpc.EmulatorControllerStub(grpc.insecure_channel('localhost:8556'))
-    ini=next(Path('/run/user/1000/avd/running').glob('pid*.ini')).read_text()
+    client=rpc.EmulatorControllerStub(grpc.insecure_channel(os.environ.get('PRIVATE_FLOW_EMULATOR_GRPC','localhost:8556')))
+    ini=EMULATOR_INI.read_text()
     grpc_token=next(line.partition('=')[2].strip() for line in ini.splitlines() if line.startswith('grpc.token'))
     metadata=(('authorization','Bearer '+grpc_token),)
     client.setMicrophoneState(pb.MicrophoneState(realAudioEnabled=False),metadata=metadata)
-    with wave.open(os.environ['PRIVATE_FLOW_TEST_WAV'],'rb') as w:pcm=w.readframes(w.getnframes())
+    with wave.open(str(TEST_WAV),'rb') as w:pcm=w.readframes(w.getnframes())
     fmt=pb.AudioFormat(samplingRate=16000,channels=pb.AudioFormat.Mono,format=pb.AudioFormat.AUD_FMT_S16)
     def packets():
         for offset in range(0,len(pcm),3200):

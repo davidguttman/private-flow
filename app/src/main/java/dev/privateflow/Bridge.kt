@@ -11,8 +11,11 @@ object Bridge {
         val u=URI(url)
         require(u.rawUserInfo==null && u.rawQuery==null && u.rawFragment==null && (u.path.isNullOrEmpty() || u.path=="/")) { "Use only the computer address and port" }
         val h=u.host ?: error("Enter your computer's Tailscale address")
-        val oct=h.split('.').mapNotNull { it.toIntOrNull() }
-        val tail=oct.size==4 && oct[0]==100 && oct[1] in 64..127 && oct.all { it in 0..255 }
+        // The cleartext exception is for literal IPv4, never DNS names that
+        // contain numeric labels. Reject ambiguous leading-zero octets too.
+        val parts=h.split('.')
+        val literalIpv4=parts.size==4 && parts.all { it.matches(Regex("0|[1-9][0-9]{0,2}")) && it.toInt() in 0..255 }
+        val tail=literalIpv4 && parts[0]=="100" && parts[1].toInt() in 64..127
         val loop=h=="127.0.0.1" || h=="localhost" || h=="10.0.2.2"
         require(u.scheme=="https" || (u.scheme=="http" && (tail || loop))) { "Use HTTPS or your encrypted Tailscale IP" }
     }

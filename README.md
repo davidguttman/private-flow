@@ -5,7 +5,7 @@ Android floating-bubble dictation with local Voxtype transcription on your own c
 ## What this version does
 
 - Keeps your existing keyboard.
-- Shows a draggable lavender bubble beside eligible focused text fields.
+- Shows a draggable lavender bubble beside eligible focused text fields. Remembers the side and relative vertical position after a completed drag, including across service/process restarts; clamps to the current display. First use defaults to the right side, halfway down the screen.
 - Shrinks to an animated small dot after 5 seconds idle; tap or hold starts dictation directly. Shrinking pauses while interacting, recording, or transcribing. The dot keeps a stable touch target of at least 48 dp; opacity changes only the artwork, never the input window.
 - Saves bubble size (70%, 85%, 100%, 115%), opacity (20–100%), and idle-shrink preference immediately, with a live preview.
 - Tap to record, then ✓ to finish; hold to record and release to finish; X cancels.
@@ -63,7 +63,7 @@ Only captured audio goes to the bridge; existing editor text stays on Android. T
 
 ## Verification
 
-Run the endpoint-validation JVM tests (no emulator required) and portable-script prerequisite tests with:
+Run the endpoint-validation and bubble-position preference JVM tests (no emulator required) and portable-script prerequisite tests with:
 
 ```
 ./gradlew :app:testDebugUnitTest
@@ -77,6 +77,8 @@ For placeholder regression, set `PRIVATE_FLOW_BASELINE_APK` to an existing **0.2
 `./gradlew :app:assembleDebugAndroidTest` builds a separate editor-fixture APK, never bundled into the shipped app. `scripts/verify_placeholder_insertion.py` first reproduces the old unmarked-Message-placeholder append using 0.2.1, then verifies empty fields, unmarked hints with/without hint metadata, actual typed Message, middle insertion, and selected-text replacement against the current APK. It uses real Android editing/microphone capture with a loopback transcript fixture and checks that the normal keyboard remains unchanged.
 
 `python -m unittest discover -s bridge -v` checks authentication, code reuse rejection, hashed credential storage, malformed WAV rejection, inherited config / live config changes / text processing, private temporary-config cleanup, remote-backend rejection, and pause formatting. Set `PRIVATE_FLOW_TEST_WAV` to a spoken WAV fixture for real Voxtype integration; `PRIVATE_FLOW_EXPECTED_TEXT` sets its expected phrase.
+
+`uv run python scripts/verify_bubble_position.py` checks first-run placement, real drags to both sides, saved preference wiring, accessibility-service rebinds, app process restarts, idle touch-window stability, and off-screen position clamping. It requires the debug app and editor-fixture APKs above, refuses non-emulator devices, and restores the original position keys and accessibility service settings on exit without replacing unrelated preferences. It does not record audio or need a bridge. Run the existing touch regression separately for recording/tap/shrink coverage.
 
 `scripts/verify_touch_regression.py` (also available through `scripts/verify_appearance.py`) exercises actual bubble/dot taps across opacity and size settings, stable minimum hit targets, and Done-to-progress behavior against a deliberately delayed local HTTP fixture. It checks that repeated Done-area presses submit only once and that the returned text is inserted. This fixture tests Android interactions, not Voxtype inference.
 

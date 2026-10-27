@@ -31,6 +31,7 @@ class FlowAccessibilityService : AccessibilityService() {
     private var bubbleRight=true
     private var captureActive=false
     private val appearance by lazy { getSharedPreferences("appearance",0) }
+    private val bubblePosition by lazy { BubblePosition(appearance) }
     private var idleProgress=0f
     private var idleAnimation:ValueAnimator?=null
     private var touching=false
@@ -57,7 +58,12 @@ class FlowAccessibilityService : AccessibilityService() {
     fun refreshAppearance() { main.post { expandBubble();scheduleIdleShrink() } }
     var amplitude=0f
     override fun onCreateInputMethod()=InputMethod(this)
-    override fun onServiceConnected() { instance=this; wm=getSystemService(WINDOW_SERVICE) as WindowManager; bubbleY=resources.displayMetrics.heightPixels/2; syncFocus() }
+    override fun onServiceConnected() {
+        instance=this;wm=getSystemService(WINDOW_SERVICE) as WindowManager
+        val (minY,maxY)=bubbleYBounds()
+        val saved=bubblePosition.restore(resources.displayMetrics.heightPixels,minY,maxY)
+        bubbleRight=saved.right;bubbleY=saved.y;syncFocus()
+    }
     override fun onAccessibilityEvent(event:AccessibilityEvent?) { if(state=="idle")syncFocus() }
     private fun focused():AccessibilityNodeInfo? {
         for(w in windows) { if(w.type==AccessibilityWindowInfo.TYPE_INPUT_METHOD || w.type==AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY)continue
@@ -80,6 +86,17 @@ class FlowAccessibilityService : AccessibilityService() {
         if(eligible(n) && windows.any { it.type==AccessibilityWindowInfo.TYPE_INPUT_METHOD })show() else hide()
     }
     private fun dp(v:Float)=(v*resources.displayMetrics.density).roundToInt()
+    private fun bubbleYBounds():Pair<Int,Int> {
+        val height=resources.displayMetrics.heightPixels
+        val maxTop=(height-dp(max(48f,52f*sizeScale()))).coerceAtLeast(0)
+        val minY=dp(35f).coerceAtMost(maxTop)
+        return minY to (height-dp(110f)).coerceIn(minY,maxTop)
+    }
+    private fun saveBubblePosition() {
+        val (minY,maxY)=bubbleYBounds()
+        bubbleY=bubbleY.coerceIn(minY,maxY)
+        bubblePosition.save(bubbleRight,bubbleY,resources.displayMetrics.heightPixels,minY,maxY)
+    }
     private fun show() {
         if(bubble!=null)return
         idleProgress=0f
@@ -103,7 +120,8 @@ class FlowAccessibilityService : AccessibilityService() {
         p.alpha=1f
         v.alpha=appearance.getInt("opacity",100).coerceIn(20,100)/100f
         p.x=if(bubbleRight)resources.displayMetrics.widthPixels-p.width-dp(8f) else dp(8f)
-        p.y=bubbleY.coerceIn(dp(35f),resources.displayMetrics.heightPixels-dp(110f))
+        val (minY,maxY)=bubbleYBounds()
+        p.y=bubbleY.coerceIn(minY,maxY)
         wm.updateViewLayout(v,p); v.invalidate()
     }
     private fun fieldText(n:AccessibilityNodeInfo)=if(n.isShowingHintText) "" else n.text?.toString()?:""
@@ -196,7 +214,8 @@ class FlowAccessibilityService : AccessibilityService() {
                 MotionEvent.ACTION_UP -> {
                     main.removeCallbacks(longPress)
                     if(holding)finish()
-                    else if(!moved)when(state) { "idle" -> performClick();"recording" -> if(e.x<dp(52f*sizeScale()))cancel() else if(e.x>width-dp(52f*sizeScale()))finish();"transcribing" -> if(e.x<dp(52f*sizeScale()))cancel() }
+                    else if(moved)saveBubblePosition()
+                    else when(state) { "idle" -> performClick();"recording" -> if(e.x<dp(52f*sizeScale()))cancel() else if(e.x>width-dp(52f*sizeScale()))finish();"transcribing" -> if(e.x<dp(52f*sizeScale()))cancel() }
                     holding=false;touching=false;scheduleIdleShrink();return true
                 }
                 MotionEvent.ACTION_CANCEL -> { main.removeCallbacks(longPress);if(holding)cancel();holding=false;touching=false;scheduleIdleShrink();return true }

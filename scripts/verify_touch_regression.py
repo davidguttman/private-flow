@@ -122,7 +122,7 @@ try:
     assert len(requests)==1,'Repeated Done presses duplicated transcription'
     time.sleep(3)
     fields=[n.attrib.get('text') for n in dump().iter('node') if n.attrib.get('class')=='android.widget.EditText']
-    assert fields==[expected],fields
+    assert fields==[expected+' '],fields
     capture('inserted.png')
     result={'touch_matrix':results,'processing':['Done removed immediately','spinner and label shown (screenshot)','notification updated','no idle shrinking while waiting','repeated Done-area taps submit only once','result inserted exactly once'],'backend':'delayed loopback fixture; real microphone capture; no inference performed'}
     (OUT/'verification.json').write_text(json.dumps(result,indent=2))

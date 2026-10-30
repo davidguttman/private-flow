@@ -121,7 +121,8 @@ with tempfile.TemporaryDirectory() as state:
     shell('input','keycombination','113','29');shell('input','keycombination','113','31')
     time.sleep(.5)
     actual=client.getClipboard(Empty(),metadata=metadata).text
-    assert actual==results[0][1]['text'],f'Transcript insertion changed content: {actual}'
+    expected=results[0][1]['text'].rstrip(' ')+' '
+    assert actual==expected,f'Transcript insertion changed content: {actual!r} != {expected!r}'
     client.setClipboard(pb.ClipData(text=''),metadata=metadata)
     shell('input','keyevent','123')
     print('Verified emulator'+(' (Google Messages, unsent draft)' if '--messages' in sys.argv else '')+': pairing UI → bubble → foreground microphone capture → injected speech → actual local Voxtype → editor insertion')

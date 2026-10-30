@@ -15,6 +15,7 @@ Android floating-bubble dictation with local Voxtype transcription on your own c
 - Uses the host’s existing Voxtype configuration by default: model, language, local engine, spoken punctuation, word replacements, and configured post-processing command. No separate phone profile is created.
 - Removes pause ellipses (`...` / `…`) locally after transcription, without rewriting words or changing ordinary sentence punctuation and paragraph breaks.
 - Inserts through Android’s accessibility editing connection at the original selection, preserving actual surrounding text. Placeholder strings exposed as accessibility text are never copied into the editor. Your existing keyboard remains selected; native paste is the fallback when an editing connection is unavailable.
+- Every nonblank insertion ends with an ASCII space, with the cursor after it—even before existing whitespace or punctuation. Mid-sentence, only the transcript's first letter is lowercased (including names, acronyms, and “I”); field/paragraph starts and positions after `. ! ?` retain the original case. Punctuation and existing editor contents are preserved. Context is read locally from the real editing connection; unavailable context preserves case, still adding the space. Blank transcripts do nothing.
 - If the field, selection, or existing content changes, copies the transcript instead of inserting into an unexpected destination.
 - Hides in password, number, date/time, and phone-number fields.
 - Uses single-use, 15-minute pairing codes and hashed per-device bearer credentials.
@@ -63,7 +64,7 @@ Only captured audio goes to the bridge; existing editor text stays on Android. T
 
 ## Verification
 
-Run the endpoint-validation and bubble-position preference JVM tests (no emulator required) and portable-script prerequisite tests with:
+Run the insertion-formatting, endpoint-validation, and bubble-position preference JVM tests (no emulator required) and portable-script prerequisite tests with:
 
 ```
 ./gradlew :app:testDebugUnitTest
@@ -75,6 +76,8 @@ The Android UI scripts discover `adb` from `ANDROID_HOME`, then `ANDROID_SDK_ROO
 For placeholder regression, set `PRIVATE_FLOW_BASELINE_APK` to an existing **0.2.1 debug APK** signed with the same key as the current debug APK. The script fails before starting its fixture if this prerequisite is missing. Build the current app and editor fixture with `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest`, and install the fixture APK from `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk` before running. The baseline is an explicitly supplied local artifact, not downloaded or bundled. The touch/appearance scripts additionally require Pillow (for example, `uv run --with pillow python scripts/verify_touch_regression.py`).
 
 `./gradlew :app:assembleDebugAndroidTest` builds a separate editor-fixture APK, never bundled into the shipped app. `scripts/verify_placeholder_insertion.py` first reproduces the old unmarked-Message-placeholder append using 0.2.1, then verifies empty fields, unmarked hints with/without hint metadata, actual typed Message, middle insertion, and selected-text replacement against the current APK. It uses real Android editing/microphone capture with a loopback transcript fixture and checks that the normal keyboard remains unchanged.
+
+`uv run python scripts/verify_insertion_formatting.py` checks exact text **and cursor** using the current editor fixture APK, real microphone WAV capture, and a loopback text-response fixture (no Voxtype inference or baseline APK). It covers sequential dictations, keyboard input immediately afterward, sentence/paragraph starts, intentionally lowercased names/acronyms/“I”, selection replacement, insertion before whitespace/punctuation, unmarked hints, blank transcripts, and unavailable/short context. Use the already-running disposable emulator and saved loopback connection described above; install both current APKs first. Results are saved under ignored `evidence/insertion-formatting/`. Cursor observation and unavailable-context simulation exist only in the separate androidTest APK, not the shipped app.
 
 `python -m unittest discover -s bridge -v` checks authentication, code reuse rejection, hashed credential storage, malformed WAV rejection, inherited config / live config changes / text processing, private temporary-config cleanup, remote-backend rejection, and pause formatting. Set `PRIVATE_FLOW_TEST_WAV` to a spoken WAV fixture for real Voxtype integration; `PRIVATE_FLOW_EXPECTED_TEXT` sets its expected phrase.
 

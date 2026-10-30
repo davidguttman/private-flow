@@ -144,14 +144,16 @@ class FlowAccessibilityService : AccessibilityService() {
     }
     fun cancel() { generation++;captureActive=false;CaptureService.instance?.finish(true);resetIdle();amplitude=0f;target=null;updateLayout();syncFocus() }
     fun currentGeneration()=sessionGeneration
+    private fun targetIsStable(n:AccessibilityNodeInfo?):Boolean {
+        val current=focused()
+        return n!=null && n.refresh() && n.isFocused && current?.windowId==targetWindow &&
+            (targetId==null || current.viewIdResourceName==targetId) && eligible(n) &&
+            fieldText(n)==targetText && n.textSelectionStart==targetSelection.first && n.textSelectionEnd==targetSelection.second
+    }
     fun captured(text:String, gen:Int) { main.post {
         if(gen!=generation)return@post
         val n=target
-        val current=focused()
-        val stable=n!=null && n.refresh() && n.isFocused && current?.windowId==targetWindow &&
-            (targetId==null || current.viewIdResourceName==targetId) && eligible(n) &&
-            fieldText(n)==targetText && n.textSelectionStart==targetSelection.first && n.textSelectionEnd==targetSelection.second
-        if(!stable || text.isBlank()) {
+        if(!targetIsStable(n) || text.isBlank()) {
             if(text.isNotBlank())copyTranscript(text,"Text field changed. Transcript copied — paste where you want it.")
             finishInsertion()
             return@post
@@ -162,14 +164,31 @@ class FlowAccessibilityService : AccessibilityService() {
         val connection=method?.currentInputConnection
         val editor=method?.currentInputEditorInfo
         if(connection!=null && method.currentInputStarted && editor?.packageName==n!!.packageName?.toString()) {
-            connection.commitText(text,1,null)
+            // One bounded query, only at insertion time. Never use accessibility
+            // node text for case: even an unmarked hint can masquerade as content.
+            // A null/short/invalid result preserves case, but not the trailing space.
+            val surrounding=runCatching { connection.getSurroundingText(256,0,0) }.getOrNull()
+            val before=surrounding?.let {
+                InsertionFormatting.beforeSelection(it.text.toString(),it.selectionStart,it.selectionEnd,it.offset)
+            }
+            // The synchronous editor query can take time. Recheck the original
+            // target after it returns, rather than committing to a moved selection.
+            if(!targetIsStable(n)) {
+                copyTranscript(text,"Text field changed. Transcript copied — paste where you want it.")
+                finishInsertion()
+                return@post
+            }
+            val insertion=InsertionFormatting.format(text,before)
+            connection.commitText(insertion,1,null) // 1 = immediately after the entire inserted string
             android.util.Log.d("PrivateFlow","Insertion: native accessibility input connection")
-            confirmInsertion(n,text)
+            confirmInsertion(n,insertion)
         } else {
             // Native paste also operates on the real Editable rather than hints.
-            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Private dictation",text))
-            if(n!!.performAction(AccessibilityNodeInfo.ACTION_PASTE))confirmInsertion(n,text)
-            else { copyTranscript(text,"Could not insert here. Transcript copied — paste where you want it.");finishInsertion() }
+            // No trustworthy editor context without a connection; preserve case.
+            val insertion=InsertionFormatting.format(text,null)
+            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Private dictation",insertion))
+            if(n!!.performAction(AccessibilityNodeInfo.ACTION_PASTE))confirmInsertion(n,insertion)
+            else { copyTranscript(insertion,"Could not insert here. Transcript copied — paste where you want it.");finishInsertion() }
         }
     } }
     private fun copyTranscript(text:String,message:String) {

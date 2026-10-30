@@ -72,7 +72,8 @@ try:
     cases=[('unmarked-no-hint','',0,0),('unmarked-with-hint','',0,0),('normal','',0,0),('normal','Message',7,7),('normal','Message',0,0),('normal','Before after',7,7),('normal','Before old after',7,10)]
     for mode,initial,start,end in cases:
         actual=exercise(mode,initial,start,end)
-        expected=initial[:start]+transcript+initial[end:]
+        insertion=('dictation. ' if start>0 else 'Dictation. ')
+        expected=initial[:start]+insertion+initial[end:]
         assert actual==expected,(mode,initial,actual,expected)
         rows.append({'mode':mode,'initial':initial,'selection':[start,end],'actual':actual})
         print('Verified:',rows[-1],flush=True)
